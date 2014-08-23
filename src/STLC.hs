@@ -74,6 +74,21 @@ vapp (VLam f) v     = f v
 vapp (VNeutral n) v = VNeutral (NApp n v)
 
 -- | Big-step evaluation rules for checkable terms
+--   Lambdas modify the environment!
 downEval :: DownTerm -> Env -> Value
 downEval (Inf i) d = upEval i d
 downEval (Lam e) d = VLam $ \x -> downEval e (x : d)
+
+-- Contexts
+
+data Kind = Star
+  deriving Show
+
+data Info 
+  = HasKind Kind
+  | HasType Type
+    deriving Show
+
+-- | Context associates names with either
+-- HasKind Star (*) or a HasType t (type)
+type Context = [(Name, Info)]
