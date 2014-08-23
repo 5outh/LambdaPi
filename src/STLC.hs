@@ -2,6 +2,9 @@
 Implementation of the STLC in the paper.
 -}
 
+-- Abstract Syntax
+
+-- | Inferable Term
 data UpTerm
   = Ann DownTerm Type -- Annotated term
   | Bound Int -- DeBruijn Index
@@ -11,6 +14,7 @@ data UpTerm
   | UpTerm :@: DownTerm -- Application
     deriving (Show, Eq)
 
+-- | Checkable Term
 data DownTerm
   = Inf UpTerm
   -- ^ Inferable terms
@@ -46,6 +50,30 @@ data Neutral
   | NApp Neutral Value
   -- ^ Application of a neutral term to a value
 
--- | creates the value corresponding to a free var
+-- | Creates the value corresponding to a free var
 vfree :: Name -> Value
-vfree n = VNeutral (NFree n)
+vfree = VNeutral . NFree
+
+-- Evaluation
+
+-- | Environment of Values
+-- The i'th position corresponds to the value of variable i
+-- (De Bruijn Index i)
+type Env = [Value]
+
+-- | Big-step evaluation rules for inferable terms
+upEval :: UpTerm -> Env -> Value
+upEval (Ann e _)  d = downEval e d
+upEval (Free x)   d = vfree x
+upEval (Bound i)  d = d !! i
+upEval (e :@: e') d = vapp (upEval e d) (downEval e' d)
+
+-- | Value application
+vapp :: Value -> Value -> Value
+vapp (VLam f) v     = f v
+vapp (VNeutral n) v = VNeutral (NApp n v)
+
+-- | Big-step evaluation rules for checkable terms
+downEval :: DownTerm -> Env -> Value
+downEval (Inf i) d = upEval i d
+downEval (Lam e) d = VLam $ \x -> downEval e (x : d)
