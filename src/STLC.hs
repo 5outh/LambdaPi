@@ -8,6 +8,8 @@ import Control.Monad.Trans
 
 -- Abstract Syntax
 
+infixl 0 :@:
+
 -- | Inferable Term
 data UpTerm
   = Ann DownTerm Type -- Annotated term
@@ -156,9 +158,7 @@ downType :: Int -> Context -> DownTerm -> Type -> Result ()
 -- CHK (figure 3)
 downType i ctx (Inf e) t = do
   t' <- upType i ctx e
-  unless (t == t') 
-         (throwError 
-         $ "type mismatch in downType: " ++ show t ++ " /= " ++ show t')
+  unless (t == t') (throwError "type mismatch")
 
 -- LAM (figure 3)
 downType i ctx (Lam e) (Fun t t') = 
@@ -236,13 +236,6 @@ term2 = Ann const' (Fun (Fun (tfree "b") (tfree "b"))
                         (Fun (tfree "a")
                              (Fun (tfree "b") (tfree "b"))))
         :@: id' :@: free "y"
-env1 = [(Global "y", HasType (tfree "a")),
+env1 = [(Global "y", HasType (tfree "b")),
         (Global "a", HasKind Star)]
 env2 = (Global "b", HasKind Star) : env1
-
--- @TODO: Debug. 
--- > upTypeZero env2 term2
--- yields
--- type mismatch in downType: 
---   TFree (Global "b") /= TFree (Global "a")
-
