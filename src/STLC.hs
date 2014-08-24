@@ -3,6 +3,8 @@ Implementation of the STLC in the paper.
 -}
 
 import Control.Monad
+import Control.Monad.Trans.Either
+import Control.Monad.Trans
 
 -- Abstract Syntax
 
@@ -110,7 +112,7 @@ type Context = [(Name, Info)]
 type Result a = Either String a
 
 -- Report an error
-throwError :: a -> Either a b
+throwError :: String -> Result a
 throwError = Left
 
 -- Check for the well-formedness of a type
@@ -154,7 +156,9 @@ downType :: Int -> Context -> DownTerm -> Type -> Result ()
 -- CHK (figure 3)
 downType i ctx (Inf e) t = do
   t' <- upType i ctx e
-  unless (t == t') (throwError "type mismatch")
+  unless (t == t') 
+         (throwError 
+         $ "type mismatch in downType: " ++ show t ++ " /= " ++ show t')
 
 -- LAM (figure 3)
 downType i ctx (Lam e) (Fun t t') = 
@@ -181,4 +185,64 @@ upSubst i r (e :@: e') = upSubst i r e :@: downSubst i r e'
 downSubst :: Int -> UpTerm -> DownTerm -> DownTerm
 downSubst i r (Inf e) = Inf (upSubst i r e)
 downSubst i r (Lam e) = Lam (downSubst (i + 1) r e)
+
+-- Quotation
+
+-- Again, 0 is the number of binders traversed.
+quoteZero :: Value -> DownTerm
+quoteZero = quote 0
+
+-- i is the number of binders traversed.
+-- | Get the internal structure of a value, for instance to
+--   display it.
+quote :: Int -> Value -> DownTerm
+quote i (VLam f) = Lam (quote (i + 1) (f (vfree (Quote i))))
+-- ^ Generate a fresh variable Quote i and apply f to it.
+--   Then, go a level deeper and evaluate the rest.
+quote i (VNeutral n) = Inf (neutralQuote i n)
+-- ^ Propagate to neutralQuote (application of a free variable
+--   to other values)
+
+-- | Quote a neutral value
+neutralQuote :: Int -> Neutral -> UpTerm
+neutralQuote i (NFree x) = boundfree i x
+neutralQuote i (NApp n v) = neutralQuote i n :@: quote i v
+
+-- | Check if the variable occuring at the head of the application is bound or free
+boundfree :: Int -> Name -> UpTerm
+boundfree i (Quote k) = Bound (i - k - 1)
+boundfree i x         = Free x
+
+{-
+Extended example of quoting, given:
+Const = VLam (\x -> VLam (\y -> x))
+  quote 0 (VLam (\x -> VLam (\y -> x))) -- quoteZero
+= Lam (quote 1 (VLam (\y -> vfree (Quote 0)))) -- quote
+= Lam (Lam (quote 2 (vfree (Quote 0)))) -- quote
+= Lam (Lam (neutralQuote 2 (NFree (Quote 0)))) -- quote
+= Lam (Lam (Bound 1)) -- neutralQuote
+= λ λ 1 (in de bruijn indixes)
+= λx. λy. x (normal notation)
+-}
+
+-- Example terms
+
+id' = Lam (Inf (Bound 0))
+const' = Lam (Lam (Inf (Bound 1)))
+tfree a = TFree (Global a)
+free x = Inf (Free (Global x))
+term1 = Ann id' (Fun (tfree "a") (tfree "a")) :@: free "y"
+term2 = Ann const' (Fun (Fun (tfree "b") (tfree "b"))
+                        (Fun (tfree "a")
+                             (Fun (tfree "b") (tfree "b"))))
+        :@: id' :@: free "y"
+env1 = [(Global "y", HasType (tfree "a")),
+        (Global "a", HasKind Star)]
+env2 = (Global "b", HasKind Star) : env1
+
+-- @TODO: Debug. 
+-- > upTypeZero env2 term2
+-- yields
+-- type mismatch in downType: 
+--   TFree (Global "b") /= TFree (Global "a")
 
